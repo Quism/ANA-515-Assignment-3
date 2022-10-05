@@ -1,56 +1,55 @@
 library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(stringr)
 
-#1. Read and save the file
+#1. Read and save the file.
 
-df <-read_csv("StormEvents_details-ftp_v1.0_d1988_c20220425.csv.gz")
+se <- read_csv("StormEvents_details-ftp_v1.0_d1988_c20220425.csv.gz")
+head(se, 5)
 
-#2. Limit the dataframe 
+#2. Limit the dataframe.
 
-cols<-c("BEGIN_DAY" ,"BEGIN_TIME" ,"END_DAY" ,"END_TIME", "EPISODE_ID", 
-        "EVENT_ID", "STATE" , "STATE_FIPS" , "CZ_TYPE", "CZ_FIPS" , "CZ_NAME",
-        "EVENT_TYPE" , "SOURCE" ,  "BEGIN_LAT" , "BEGIN_LON" , "END_LAT",
-        "END_LON" , "BEGIN_DATE_TIME" ,"END_DATE_TIME")
+myvars <- c("BEGIN_YEARMONTH", "BEGIN_DAY", "BEGIN_TIME","END_YEARMONTH",
+            "END_DAY","END_TIME","EPISODE_ID","EVENT_ID","STATE","STATE_FIPS",
+            "CZ_NAME","CZ_TYPE","CZ_FIPS","EVENT_TYPE","SOURCE","BEGIN_LAT",
+            "BEGIN_LON","END_LAT","END_LON")
+newse <- se[myvars]
+head(newse)
 
-stormevent.df<-df[cols]
+#3. Arrange the data by beginning year and month.
 
-#3. Arrange the data by beginning year and month
+newse <- arrange(newse, BEGIN_YEARMONTH)
 
-stormevent.df <-stormevent.df %>%
-  mutate(BEGIN_DATE_TIME = dmy_hms(BEGIN_DATE_TIME) ) %>%
-  mutate(END_DATE_TIME = dmy_hms(END_DATE_TIME) ) 
+#4.	Change state and county names to title case.
 
-#4.	Change state and county names to title case
+newse$STATE <- str_to_title(newse$STATE)
+newse$CZ_NAME <- str_to_title(newse$CZ_NAME)
 
-stormevent.df <- stormevent.df %>%
-  mutate(STATE = toTitleCase(tolower(STATE)) )
+#5. Limit to the events listed by county FIPS and then remove the CZ_TYPE column.
 
-data.frame(table(stormevent.df$STATE))
+newse <- filter(newse, CZ_TYPE=="C")
+newse <- select(newse, -CZ_TYPE)
 
-StormEvent.df <-filter(StormEvent.df , CZ_TYPE=="C")
+#6. Pad the state and county FIPS with a “0” at the beginning and then unite the two columns to make one fips column with the 5 or 6-digit county FIPS code.
 
-table(StormEvent.df$CZ_TYPE)
-StormEvent.df$CZ_TYPE <-NULL
+newse$STATE_FIPS <- str_pad(newse$STATE_FIPS, width = 3, side = "left", pad = "0")
+newse$CZ_FIPS <- str_pad(newse$CZ_FIPS, width = 3, side = "left", pad = "0")
 
+#7. Change all the column names to lower case.
 
+newse <- rename_all(newse, tolower)
 
-StormEvent.df <-StormEvent.df %>%
-  mutate(CZ_FIPS =str_pad(CZ_FIPS , width = 5, side="left" , 0))  %>%
-  mutate(STATE_FIPS =str_pad(STATE_FIPS , width = 5, side="left" , 0))
-
-StormEvent.df <-StormEvent.df %>%
-  unite("FIPS" ,c(CZ_FIPS,STATE_FIPS))
-
-StormEvent.df <- rename_all(StormEvent.df, .funs = tolower)
+#8. Create a dataframe with these three columns: state name, area, and region.
 
 data("state")
-us_state_info<-data.frame(state=state.name, region=state.region, area=state.area)
+us_state_info <- data.frame(state = state.name, region = state.region, area = state.area)
 
+#9. Create a dataframe with the number of events per state in the year of your birth.
 
-Newset<- data.frame(table(StormEvent.df$STATE))
+newset<- data.frame(table(newse$state))
+mergese <- merge(us_state_info, newset, by.x="state", by.y="Var1")
 
-
-merge.df<- merge(us_state_info , Newset, by.y="Var1" , by.x="state" )
-
-ggplot(merge.df , aes(x=area , y=Freq, color=region)) + 
-  geom_point() + xlab("Land area (Square miles)") + 
-  ylab("# No of storm Events in 2017")
+#10. Create the plot.
+ggplot(mergese, aes(x = area, y = Freq, color = region)) +
+geom_point() + labs (x = "Land Area (Square Miles)", y = "# of Storm Events in 1988")
